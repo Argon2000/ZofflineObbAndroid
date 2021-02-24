@@ -5,11 +5,13 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.Settings;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -25,6 +27,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileDescriptor;
+import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -48,6 +51,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
+import static android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION;
+
 public class MainActivity extends AppCompatActivity {
 
     @Override
@@ -69,24 +74,27 @@ public class MainActivity extends AppCompatActivity {
 
         AssetManager assetManager = this.getAssets();
 
+        if(!Environment.isExternalStorageManager()) {
+            addInfo("Please allow access to all files");
+            Intent intent = new Intent(ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+            startActivity(intent);
+            btn.setEnabled(true);
+            return;
+        }
+
         Thread t1 = new Thread(() -> {
             addInfo("Started...");
 
             addInfo("Locating file...");
             File sdCardRoot = Environment.getExternalStorageDirectory();
-            File folder = new File(sdCardRoot, "Android/obb/com.zwift.zwiftgame");
-            File[] files = folder.listFiles();
+            File folder = new File(sdCardRoot, "Download");
+            File[] files = folder.listFiles((dir, name) -> name.toLowerCase().endsWith("zwiftgame.obb"));
 
-            if(files != null) {
-                File obb_file = null;
-                for (File f : files) {
-                    if (f.isFile()) {
-                        String name = f.getName();
-                        if(name.endsWith(".obb")) {
-                            obb_file = f;
-                            break;
-                        }
-                    }
+            if(files != null && files.length > 0) {
+                File obb_file = files[0];
+                if(obb_file == null) {
+                    addInfo("File not found in Download, please move it from Android/obb/com.zwiftgame.zwift");
+                    return;
                 }
 
                 //Rename OBB to ZIP
@@ -131,13 +139,8 @@ public class MainActivity extends AppCompatActivity {
 
                 //Unzip
                 addInfo("Unzipping, this will take a while...");
-                String extract_dir = zip_file.getParent() + "/extracted";
-                File extracted = new File(zip_file.getParent() + "/extracted");
-                try {
-                    unzip(zip_file, extracted);
-                } catch (IOException e) {
-                    addInfo(e.getMessage());
-                }
+                String extract_dir = zip_file.getParent() + "/extracted/";
+                unzip(zip_file.getPath(), extract_dir);
 
                 //Delete ZIP
                 addInfo("Deleting ZIP file...");
@@ -197,7 +200,7 @@ public class MainActivity extends AppCompatActivity {
                 } catch (IOException e) {
                     addInfo(e.getMessage());
                 }
-                long diff = org_size - new_size - 182;
+                long diff = org_size - new_size - 136;
                 addInfo("Difference in size: " + diff);
 
                 String dummy_path = obb_file.getParent() + "/dummy.file";
@@ -243,8 +246,7 @@ public class MainActivity extends AppCompatActivity {
                     addInfo("Difference in size: " + diff);
 
                     if(diff != 0) {
-                        addInfo("Filesize not equal, aborting...");
-                        return;
+                        addInfo("Filesize not equal, installation might fail...");
                     }
                 }
 
@@ -296,7 +298,7 @@ public class MainActivity extends AppCompatActivity {
                 File extract_folder = new File(extract_dir);
                 deleteDirectory(extract_folder);
 
-                addInfo("Done!");
+                addInfo("Done! REMEMBER to move the file from Download to Android/obb/com.zwift.zwiftgame");
             }
             else {
                 addInfo("File not found.");
@@ -323,31 +325,41 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void unzip(File zipFile, File targetDirectory) throws IOException {
-        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(zipFile)));
+    public void unzip(String _zipFile, String _targetLocation) {
+        //create target location folder if not exist
+        dirChecker(_targetLocation);
+
         try {
-            ZipEntry ze;
-            int count;
+            FileInputStream fin = new FileInputStream(_zipFile);
+            ZipInputStream zin = new ZipInputStream(fin);
+            ZipEntry ze = null;
             byte[] buffer = new byte[8192];
-            while ((ze = zis.getNextEntry()) != null) {
-                File file = new File(targetDirectory, ze.getName());
-                File dir = ze.isDirectory() ? file : file.getParentFile();
-                if (!dir.isDirectory() && !dir.mkdirs())
-                    throw new FileNotFoundException("Failed to ensure directory: " +
-                            dir.getAbsolutePath());
-                if (ze.isDirectory())
-                    continue;
-                FileOutputStream fout = new FileOutputStream(file);
-                try {
-                    while ((count = zis.read(buffer)) != -1)
-                        fout.write(buffer, 0, count);
-                } finally {
+            while ((ze = zin.getNextEntry()) != null) {
+
+                //create dir if required while unzipping
+                if (ze.isDirectory()) {
+                    dirChecker(_targetLocation + ze.getName());
+                } else {
+                    FileOutputStream fout = new FileOutputStream(_targetLocation + ze.getName());
+                    for (int c = zin.read(buffer); c != -1; c = zin.read(buffer)) {
+                        fout.write(buffer, 0, c);
+                    }
+
+                    zin.closeEntry();
                     fout.close();
                 }
+
             }
-        } finally {
-            zis.close();
+            zin.close();
+        } catch (Exception e) {
+            addInfo(e.getMessage());
         }
+    }
+
+    private void dirChecker(String path) {
+        File dir = new File(path);
+        if (!dir.isDirectory() && !dir.mkdirs())
+            addInfo("Failed to create folder: " + dir.getAbsolutePath());
     }
 
     public boolean zipFolder(String sourcePath, String toLocation) {
