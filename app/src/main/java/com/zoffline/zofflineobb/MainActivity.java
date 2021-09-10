@@ -82,18 +82,27 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        if(!getPackageManager().canRequestPackageInstalls()) {
+            addInfo("Please allow app to install APK (to access OBB folder)");
+            Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+            startActivity(intent);
+            btn.setEnabled(true);
+            return;
+        }
+
         Thread t1 = new Thread(() -> {
             addInfo("Started...");
 
             addInfo("Locating file...");
             File sdCardRoot = Environment.getExternalStorageDirectory();
-            File folder = new File(sdCardRoot, "Download");
+            File folder = new File(sdCardRoot, "Android/obb/com.zwift.zwiftgame");
             File[] files = folder.listFiles((dir, name) -> name.toLowerCase().endsWith("zwiftgame.obb"));
 
             if(files != null && files.length > 0) {
                 File obb_file = files[0];
                 if(obb_file == null) {
-                    addInfo("File not found in Download, please move it from Android/obb/com.zwiftgame.zwift");
+                    addInfo("File not found.");
+                    btn.setEnabled(true);
                     return;
                 }
 
@@ -200,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
                 } catch (IOException e) {
                     addInfo(e.getMessage());
                 }
-                long diff = org_size - new_size - 136;
+                long diff = org_size - new_size - 182;
                 addInfo("Difference in size: " + diff);
 
                 String dummy_path = obb_file.getParent() + "/dummy.file";
@@ -298,10 +307,11 @@ public class MainActivity extends AppCompatActivity {
                 File extract_folder = new File(extract_dir);
                 deleteDirectory(extract_folder);
 
-                addInfo("Done! REMEMBER to move the file from Download to Android/obb/com.zwift.zwiftgame");
+                addInfo("Done!");
             }
             else {
                 addInfo("File not found.");
+                btn.setEnabled(true);
             }
         });
         t1.start();
