@@ -51,6 +51,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
+import static android.os.Build.VERSION.SDK_INT;
 import static android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION;
 
 public class MainActivity extends AppCompatActivity {
@@ -74,12 +75,14 @@ public class MainActivity extends AppCompatActivity {
 
         AssetManager assetManager = this.getAssets();
 
-        if(!Environment.isExternalStorageManager()) {
-            addInfo("Please allow access to all files");
-            Intent intent = new Intent(ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
-            startActivity(intent);
-            btn.setEnabled(true);
-            return;
+        if(SDK_INT >= 30) {
+            if (!Environment.isExternalStorageManager()) {
+                addInfo("Please allow access to all files");
+                Intent intent = new Intent(ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                startActivity(intent);
+                btn.setEnabled(true);
+                return;
+            }
         }
 
         if(!getPackageManager().canRequestPackageInstalls()) {
